@@ -10,6 +10,9 @@ const DEFAULTS = {
     title: "", // 表示中の称号
     companion: "", // 表示中の仲間id
     frame: "", // プロフィール枠
+    avatar: "", // プロフィールアバターid
+    background: "", // プロフィール背景id
+    decorations: [], // ホーム装飾id（複数装備可）
     createdAt: null,
   },
   curriculum: null, // seed から初回生成
@@ -19,7 +22,7 @@ const DEFAULTS = {
   streak: { current: 0, best: 0, lastVisit: null },
   xp: 0,
   points: 0,
-  gacha: { owned: {}, history: [] },
+  gacha: { owned: {}, history: [], pity: 0 },
   exams: [],
   achievements: {}, // code -> unlockedAt(ISO)
   timer: { startedAt: null, unitId: null },

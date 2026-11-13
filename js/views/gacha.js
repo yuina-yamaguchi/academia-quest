@@ -5,6 +5,9 @@ const TABS = [
   { id: "companion", label: "仲間", icon: "🐾" },
   { id: "title", label: "称号", icon: "🏷️" },
   { id: "frame", label: "枠", icon: "🖼️" },
+  { id: "background", label: "背景", icon: "🎨" },
+  { id: "decoration", label: "装飾", icon: "🕯️" },
+  { id: "avatar", label: "アバター", icon: "😊" },
 ];
 
 let tab = "companion";
@@ -12,6 +15,14 @@ let lastResults = null;
 
 function stars(rarity) {
   return "★".repeat(rarity);
+}
+
+function artSpan(item) {
+  const art = game.itemArt(item);
+  if (item.type === "avatar" && art.startsWith("<svg")) {
+    return `<span class="art-svg">${art}</span>`;
+  }
+  return `<span>${art}</span>`;
 }
 
 function rarityClass(r) {
@@ -23,14 +34,34 @@ export function render(root) {
   const gacha = store.get("gacha");
   const settings = store.get("settings");
   const pulls = game.totalPulls();
+  const pity = game.pityState();
+  const pickup = game.GACHA_ITEMS.filter((i) => i.rarity === 5 && (i.type === "companion" || i.type === "avatar"));
 
   root.innerHTML = `
-    <div class="section-head"><h2>お宝</h2><span class="hint">星辰ガチャ</span></div>
+    <div class="section-head"><h2>お宝</h2><span class="hint">星辰の祈り</span></div>
 
     <section class="panel gacha-banner">
       <div class="g-title">✦ 星辰の祈り ✦</div>
-      <div class="g-sub">学習で貯めた星辰で、仲間と称号を引き寄せよう</div>
+      <div class="g-sub">学習で貯めた星辰で、仲間とお守りを引き寄せよう</div>
       <div class="g-cost">所持ポイント: ${points.toLocaleString()}✨ ・ 累計引数 ${pulls}回</div>
+
+      <div class="pickup-row">
+        ${pickup
+          .map((item) => {
+            const owned = !!gacha.owned[item.id];
+            return `<div class="pickup-item ${rarityClass(item.rarity)} ${owned ? "" : "locked"}" title="${item.name}">
+              ${artSpan(item)}
+              <span class="pk-rr">${stars(item.rarity)}</span>
+            </div>`;
+          })
+          .join("")}
+      </div>
+
+      <div class="pity-box">
+        <div class="gauge-label"><span>天井まであと <b>${pity.remaining}</b> 連</span><span>★5 ${game.GACHA_PITY}連確定</span></div>
+        <div class="gauge slim" style="--gauge-color:#e8b84b"><i style="width:${(pity.ratio * 100).toFixed(1)}%"></i></div>
+      </div>
+
       <div class="gacha-actions">
         <button class="btn" data-action="pull1" ${points < 100 ? "disabled" : ""}>祈り 1回<br/><small>100✨</small></button>
         <button class="btn btn-primary" data-action="pull10" ${points < 1000 ? "disabled" : ""}>祈り 10回（★4以上確定）<br/><small>1000✨</small></button>
@@ -43,7 +74,7 @@ export function render(root) {
                 .map(
                   (r, i) => `
                 <div class="g-card ${rarityClass(r.rarity)}" style="animation-delay:${i * 0.07}s">
-                  <div class="g-ico">${r.icon}</div>
+                  <div class="g-ico">${artSpan(r)}</div>
                   <div class="g-nm">${r.name}</div>
                   <div class="g-rr">${stars(r.rarity)}</div>
                 </div>`
@@ -63,15 +94,13 @@ export function render(root) {
         ${game.GACHA_ITEMS.filter((i) => i.type === tab)
           .map((item) => {
             const owned = gacha.owned[item.id];
-            const equipped =
-              (tab === "companion" && settings.companion === item.id) ||
-              (tab === "title" && settings.title === item.id) ||
-              (tab === "frame" && settings.frame === item.id);
+            const equipped = game.isEquipped(item.id, item.type, settings);
+            const showArt = owned ? artSpan(item) : `<span class="c-unknown">？</span>`;
             return `
             <div class="col-item ${rarityClass(item.rarity)} ${owned ? "" : "locked"} ${equipped ? "equipped" : ""}"
                  ${owned ? `data-equip="${item.id}" data-type="${item.type}" role="button" tabindex="0" title="装備する"` : ""}>
               <div class="c-rr">${stars(item.rarity)}</div>
-              <div class="c-ico">${owned ? item.icon : "❔"}</div>
+              <div class="c-ico">${showArt}</div>
               <div class="c-nm">${owned ? item.name : "？？？"}</div>
               <div class="c-meta">${owned ? (equipped ? "装備中" : `×${owned.count}・タップで装備`) : "未獲得"}</div>
             </div>`;
@@ -92,7 +121,7 @@ export function render(root) {
                   return `
                   <li class="log-item">
                     <span class="log-when">${d.getMonth() + 1}/${d.getDate()}</span>
-                    <span style="font-size:16px">${h.icon}</span>
+                    <span style="font-size:16px;flex:none;width:26px;height:26px;display:inline-flex;justify-content:center">${artSpan(h)}</span>
                     <span class="log-what">${h.name}</span>
                     <span class="q-reward" style="color:${h.rarity === 5 ? "#e8b84b" : h.rarity === 4 ? "#a97be0" : "#5a9be8"}">${stars(h.rarity)}</span>
                   </li>`;
@@ -115,7 +144,7 @@ export function onAction(action, app, dataset) {
     }
     lastResults = result;
     const best = Math.max(...result.results.map((r) => r.rarity));
-    app.toast(best === 5 ? "🌟🌟🌟 ★5が出た！！" : best === 4 ? "★4を引き当てた！" : "祈りの結果が出ました", best >= 4);
+    app.toast(best === 5 ? "🌟🌟🌟 ★5を引き当てた！！" : best === 4 ? "★4を引き当てた！" : "祈りの結果が出ました", best >= 4);
     for (const a of result.newAch) app.toastAchievement(a);
     app.refresh();
     return;
@@ -126,13 +155,7 @@ export function onAction(action, app, dataset) {
     return;
   }
   if (action === "equip") {
-    const id = dataset.equip;
-    const type = dataset.type;
-    const settings = store.get("settings");
-    if (type === "companion") settings.companion = settings.companion === id ? "" : id;
-    if (type === "title") settings.title = settings.title === id ? "" : id;
-    if (type === "frame") settings.frame = settings.frame === id ? "" : id;
-    store.set("settings", settings);
+    game.equipItem(dataset.equip, dataset.type);
     app.toast("装備しました");
     app.refresh();
   }

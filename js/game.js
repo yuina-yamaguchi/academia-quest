@@ -1,6 +1,7 @@
 // ゲームロジック: 日次・経験値・ランク・報酬・ガチャ・実績
 import { store } from "./store.js";
 import { SEED_SUBJECTS } from "./seed.js";
+import { AVATARS } from "./avatars.js";
 
 /* ---------- 日付ユーティリティ ---------- */
 
@@ -289,29 +290,104 @@ export function stopTimer() {
 
 const GACHA_COST_SINGLE = 100;
 const GACHA_COST_TEN = 1000;
+export const GACHA_PITY = 80; // 80連で★5確定
+
+const EL = { 炎: "🔥", 氷: "❄️", 雷: "⚡", 風: "🌪️", 水: "💧", 岩: "🪨", 草: "🌿" };
+export const ELEMENT_ICONS = EL;
 
 export const GACHA_ITEMS = [
-  // 仲間
-  { id: "cmp-hoshi", type: "companion", name: "星読みの幼竜", rarity: 5, icon: "🐉" },
-  { id: "cmp-tsuki", type: "companion", name: "月光の妖精", rarity: 5, icon: "🧚" },
-  { id: "cmp-neko", type: "companion", name: "三毛の案内猫", rarity: 4, icon: "🐈" },
-  { id: "cmp-usagi", type: "companion", name: "白兎の使い", rarity: 4, icon: "🐇" },
-  { id: "cmp-tori", type: "companion", name: "笛吹きの小鳥", rarity: 4, icon: "🐦" },
-  { id: "cmp-risu", type: "companion", name: "ころころリス", rarity: 3, icon: "🐿️" },
-  { id: "cmp-tako", type: "companion", name: "ぷくぷくタコ", rarity: 3, icon: "🐙" },
-  { id: "cmp-moju", type: "companion", name: "青の小毛獣", rarity: 3, icon: "🐾" },
-  // 称号
+  /* ----- 仲間（属性付き） ----- */
+  { id: "cmp-hoshi", type: "companion", name: "星読みの幼竜", rarity: 5, icon: "🐉", element: "風" },
+  { id: "cmp-tsuki", type: "companion", name: "月光の妖精", rarity: 5, icon: "🧚", element: "氷" },
+  { id: "cmp-koitsu", type: "companion", name: "炎陽の小狐", rarity: 5, icon: "🦊", element: "炎" },
+  { id: "cmp-mizukami", type: "companion", name: "水鏡の海豚", rarity: 5, icon: "🐬", element: "水" },
+  { id: "cmp-neko", type: "companion", name: "三毛の案内猫", rarity: 4, icon: "🐈", element: "草" },
+  { id: "cmp-usagi", type: "companion", name: "白兎の使い", rarity: 4, icon: "🐇", element: "氷" },
+  { id: "cmp-tori", type: "companion", name: "笛吹きの小鳥", rarity: 4, icon: "🐦", element: "風" },
+  { id: "cmp-ram", type: "companion", name: "雷雲の子羊", rarity: 4, icon: "🐏", element: "雷" },
+  { id: "cmp-ishi", type: "companion", name: "岩角の小鬼", rarity: 4, icon: "🗿", element: "岩" },
+  { id: "cmp-risu", type: "companion", name: "ころころリス", rarity: 3, icon: "🐿️", element: "草" },
+  { id: "cmp-tako", type: "companion", name: "ぷくぷくタコ", rarity: 3, icon: "🐙", element: "水" },
+  { id: "cmp-moju", type: "companion", name: "青の小毛獣", rarity: 3, icon: "🐾", element: "風" },
+  { id: "cmp-hiyoko", type: "companion", name: "炎の雛鶏", rarity: 3, icon: "🐤", element: "炎" },
+  { id: "cmp-penguin", type: "companion", name: "氷晶の鳥", rarity: 3, icon: "🐧", element: "氷" },
+  { id: "cmp-tatemono", type: "companion", name: "土竜の子", rarity: 3, icon: "🦎", element: "岩" },
+  { id: "cmp-bubble", type: "companion", name: "泡の精霊", rarity: 3, icon: "🫧", element: "水" },
+  { id: "cmp-beetle", type: "companion", name: "雷の小虫", rarity: 3, icon: "🪲", element: "雷" },
+
+  /* ----- 称号 ----- */
   { id: "ttl-seika", type: "title", name: "星辰の求道者", rarity: 5, icon: "✨" },
+  { id: "ttl-zenkyo", type: "title", name: "全科目制覇者", rarity: 5, icon: "👑" },
   { id: "ttl-shichi", type: "title", name: "七日連続の証", rarity: 4, icon: "🔥" },
   { id: "ttl-manbun", type: "title", name: "万分の才", rarity: 4, icon: "🎓" },
+  { id: "ttl-hyakuji", type: "title", name: "百時間の旅人", rarity: 4, icon: "⏳" },
+  { id: "ttl-goukaku", type: "title", name: "合格圏の射手", rarity: 4, icon: "📝" },
+  { id: "ttl-shippu", type: "title", name: "疾風の解答者", rarity: 4, icon: "⚡" },
   { id: "ttl-hajimari", type: "title", name: "初めの一歩", rarity: 3, icon: "🌱" },
   { id: "ttl-asanobird", type: "title", name: "早起きの鳥", rarity: 3, icon: "🌅" },
   { id: "ttl-yomihaya", type: "title", name: "夜更かしの学者", rarity: 3, icon: "🌙" },
-  // 枠
+  { id: "ttl-senmon", type: "title", name: "千問の解答者", rarity: 3, icon: "❓" },
+  { id: "ttl-tsumidoko", type: "title", name: "積ん読の勇士", rarity: 3, icon: "📚" },
+  { id: "ttl-hittou", type: "title", name: "筆頭の誉れ", rarity: 3, icon: "🖋️" },
+  { id: "ttl-renzoku", type: "title", name: "連続記録の証", rarity: 3, icon: "📅" },
+  { id: "ttl-kanpeki", type: "title", name: "完璧主義者", rarity: 3, icon: "🎯" },
+
+  /* ----- 枠 ----- */
   { id: "frm-gold", type: "frame", name: "黄金の縁取り", rarity: 5, icon: "👑" },
+  { id: "frm-obsidian", type: "frame", name: "黒曜の縁取り", rarity: 5, icon: "🖤" },
   { id: "frm-silver", type: "frame", name: "白銀の縁取り", rarity: 4, icon: "🥈" },
+  { id: "frm-crimson", type: "frame", name: "真紅の縁取り", rarity: 4, icon: "🌹" },
+  { id: "frm-jade", type: "frame", name: "翡翠の縁取り", rarity: 4, icon: "🍃" },
   { id: "frm-bronze", type: "frame", name: "青銅の縁取り", rarity: 3, icon: "🥉" },
+  { id: "frm-crystal", type: "frame", name: "水晶の縁取り", rarity: 3, icon: "💎" },
+  { id: "frm-rainbow", type: "frame", name: "虹色の縁取り", rarity: 3, icon: "🌈" },
+
+  /* ----- 背景（名刺風） ----- */
+  { id: "bg-starry", type: "background", name: "星空の書斎", rarity: 5, icon: "🌌", bg: "linear-gradient(160deg,#1a1f3d 0%,#2d2350 45%,#0f1226 100%)" },
+  { id: "bg-dusk", type: "background", name: "黄昏の高台", rarity: 5, icon: "🌇", bg: "linear-gradient(160deg,#3d2a52 0%,#c96f4a 60%,#f2b25c 100%)" },
+  { id: "bg-storm", type: "background", name: "稲光の雲海", rarity: 5, icon: "⛈️", bg: "linear-gradient(160deg,#1b2a4a 0%,#39507f 50%,#8fa8d6 100%)" },
+  { id: "bg-dawn", type: "background", name: "朝焼けの窓辺", rarity: 4, icon: "🌅", bg: "linear-gradient(160deg,#f7d9c4 0%,#f1a7a0 55%,#c97b8e 100%)" },
+  { id: "bg-abyss", type: "background", name: "深海の回廊", rarity: 4, icon: "🌊", bg: "linear-gradient(160deg,#082c3f 0%,#0d5a6e 60%,#1a8f8f 100%)" },
+  { id: "bg-snow", type: "background", name: "雪原の夜", rarity: 4, icon: "❄️", bg: "linear-gradient(160deg,#cfe0ef 0%,#8fa8c9 55%,#3a4a6b 100%)" },
+  { id: "bg-meadow", type: "background", name: "花畑の午後", rarity: 4, icon: "🌼", bg: "linear-gradient(160deg,#d8ecc8 0%,#a8d8a0 50%,#f2e39a 100%)" },
+  { id: "bg-parchment", type: "background", name: "羊皮紙の机", rarity: 3, icon: "📜", bg: "linear-gradient(160deg,#f3e7cd 0%,#e2cfa5 100%)" },
+  { id: "bg-sakura", type: "background", name: "桜色の朝", rarity: 3, icon: "🌸", bg: "linear-gradient(160deg,#ffe3ec 0%,#ffb7cd 100%)" },
+  { id: "bg-forest", type: "background", name: "木漏れ日の森", rarity: 3, icon: "🌳", bg: "linear-gradient(160deg,#dcecd2 0%,#9fc98f 100%)" },
+  { id: "bg-night", type: "background", name: "夜空の帳", rarity: 3, icon: "🌙", bg: "linear-gradient(160deg,#2b3358 0%,#4a5580 100%)" },
+
+  /* ----- 装飾（ホームで複数装備可） ----- */
+  { id: "dec-candle", type: "decoration", name: "黄金の燭台", rarity: 5, icon: "🕯️" },
+  { id: "dec-dragon", type: "decoration", name: "竜の立像", rarity: 5, icon: "🐲" },
+  { id: "dec-bookshelf", type: "decoration", name: "書棚", rarity: 4, icon: "📚" },
+  { id: "dec-orrery", type: "decoration", name: "天球儀", rarity: 4, icon: "🪐" },
+  { id: "dec-flag", type: "decoration", name: "学園の旗", rarity: 4, icon: "🚩" },
+  { id: "dec-sword", type: "decoration", name: "飾り剣", rarity: 4, icon: "🗡️" },
+  { id: "dec-plant", type: "decoration", name: "観葉植物", rarity: 3, icon: "🪴" },
+  { id: "dec-mug", type: "decoration", name: "魔法のマグカップ", rarity: 3, icon: "☕" },
+  { id: "dec-clock", type: "decoration", name: "置き時計", rarity: 3, icon: "⏰" },
+  { id: "dec-books", type: "decoration", name: "積ん読の山", rarity: 3, icon: "📖" },
+  { id: "dec-trophy", type: "decoration", name: "賞杯", rarity: 3, icon: "🏆" },
+
+  /* ----- アバター（SVGアート） ----- */
+  { id: "ava-starbud", type: "avatar", name: "星のつぼみ精霊", rarity: 5, icon: "🌸", art: "avatar-starbud" },
+  { id: "ava-shadow", type: "avatar", name: "影刃の戦士", rarity: 5, icon: "🥷", art: "avatar-shadow" },
+  { id: "ava-dragon", type: "avatar", name: "白銀の竜騎士", rarity: 5, icon: "⚔️", art: "avatar-dragon" },
+  { id: "ava-mike", type: "avatar", name: "三毛の小妖精", rarity: 4, icon: "🐱", art: "avatar-mike" },
+  { id: "ava-raichi", type: "avatar", name: "雷のちび獣", rarity: 4, icon: "⚡", art: "avatar-raichi" },
+  { id: "ava-flame", type: "avatar", name: "焔の剣士", rarity: 4, icon: "🔥", art: "avatar-flame" },
+  { id: "ava-abyss", type: "avatar", name: "深海の騎士", rarity: 4, icon: "🌊", art: "avatar-abyss" },
+  { id: "ava-pixie", type: "avatar", name: "雛のピクシー", rarity: 3, icon: "🐥", art: "avatar-pixie" },
+  { id: "ava-sweets", type: "avatar", name: "菓子精霊", rarity: 3, icon: "🍬", art: "avatar-sweets" },
+  { id: "ava-flower", type: "avatar", name: "花の子", rarity: 3, icon: "🌺", art: "avatar-flower" },
+  { id: "ava-bookgolem", type: "avatar", name: "書物のゴーレム", rarity: 3, icon: "📖", art: "avatar-bookgolem" },
+  { id: "ava-stone", type: "avatar", name: "石の小兵", rarity: 3, icon: "🗿", art: "avatar-stone" },
 ];
+
+// アイテムの描画文字列（アバターはSVG、他は絵文字）
+export function itemArt(item) {
+  if (item && item.type === "avatar" && item.art) return AVATARS[item.art] || item.icon;
+  return item ? item.icon : "";
+}
 
 export const GACHA_RATES = { 5: 0.006, 4: 0.051 };
 
@@ -331,15 +407,27 @@ export function pullGacha(count) {
   const cost = count === 10 ? GACHA_COST_TEN : GACHA_COST_SINGLE;
   if (!spendPoints(cost)) return { ok: false, reason: "ポイントが足りません" };
 
+  const gacha = store.get("gacha");
+  let pity = gacha.pity || 0;
+
   const results = [];
-  for (let i = 0; i < count; i++) results.push(pickItem(rollRarity()));
+  for (let i = 0; i < count; i++) {
+    pity += 1;
+    let rarity;
+    if (pity >= GACHA_PITY) {
+      rarity = 5; // 天井: ★5確定
+    } else {
+      rarity = rollRarity();
+    }
+    if (rarity === 5) pity = 0;
+    results.push(pickItem(rarity));
+  }
 
   // 10連は★4以上を1枠保証
   if (count === 10 && !results.some((i) => i.rarity >= 4)) {
     results[results.length - 1] = pickItem(4);
   }
 
-  const gacha = store.get("gacha");
   let refund = 0;
   for (const item of results) {
     const owned = gacha.owned[item.id];
@@ -352,11 +440,50 @@ export function pullGacha(count) {
     gacha.history.unshift({ ...item, at: new Date().toISOString() });
   }
   gacha.history = gacha.history.slice(0, 50);
+  gacha.pity = pity;
   store.set("gacha", gacha);
   if (refund > 0) awardPoints(refund, { silent: true });
 
   const newAch = checkAchievements();
-  return { ok: true, results, refund, newAch, cost };
+  return { ok: true, results, refund, newAch, cost, pity };
+}
+
+export function pityState() {
+  const gacha = store.get("gacha");
+  const pity = gacha.pity || 0;
+  return { pity, remaining: Math.max(0, GACHA_PITY - pity), ratio: Math.min(1, pity / GACHA_PITY) };
+}
+
+/* ---------- 装備 ---------- */
+
+// 単一装備カテゴリ: 同じIDでトグル解除。装飾のみ複数同時装備（配列トグル）
+export function equipItem(id, type) {
+  const settings = store.get("settings");
+  const item = GACHA_ITEMS.find((i) => i.id === id);
+  if (!item || item.type !== type) return settings;
+
+  if (type === "decoration") {
+    const list = Array.isArray(settings.decorations) ? settings.decorations : [];
+    settings.decorations = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  } else if (type === "avatar") {
+    settings.avatar = settings.avatar === id ? "" : id;
+  } else if (type === "background") {
+    settings.background = settings.background === id ? "" : id;
+  } else if (type === "companion") {
+    settings.companion = settings.companion === id ? "" : id;
+  } else if (type === "title") {
+    settings.title = settings.title === id ? "" : id;
+  } else if (type === "frame") {
+    settings.frame = settings.frame === id ? "" : id;
+  }
+  store.set("settings", settings);
+  return settings;
+}
+
+export function isEquipped(id, type, settings = store.get("settings")) {
+  if (type === "decoration") return Array.isArray(settings.decorations) && settings.decorations.includes(id);
+  const key = type;
+  return settings[key] === id;
 }
 
 export function totalPulls() {

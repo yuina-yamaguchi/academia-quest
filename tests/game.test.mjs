@@ -99,4 +99,54 @@ assert.ok(store.get("sessions").length > 0);
   assert.equal(game.daysBetween("2026-11-13", "2026-11-22"), 9, "日数差");
 }
 
+// ガチャ拡張: 新タイプ・SVGアバター・ピティ・装備
+{
+  const types = new Set(game.GACHA_ITEMS.map((i) => i.type));
+  for (const t of ["companion", "title", "frame", "background", "decoration", "avatar"]) {
+    assert(types.has(t), `type ${t} exists`);
+  }
+  assert.ok(game.GACHA_ITEMS.length >= 70, `pool size ${game.GACHA_ITEMS.length}`);
+  assert.equal(game.GACHA_ITEMS.filter((i) => i.type === "avatar").length, 12, "avatars = 12");
+  assert.ok(game.GACHA_ITEMS.every((i) => i.name && i.icon && i.rarity >= 3 && i.rarity <= 5), "item fields");
+  assert.ok(game.GACHA_ITEMS.filter((i) => i.type === "background").every((i) => i.bg.includes("gradient")), "backgrounds have bg");
+  const av = game.GACHA_ITEMS.find((i) => i.type === "avatar");
+  assert.ok(game.itemArt(av).startsWith("<svg"), "avatar art is SVG");
+  const cmp = game.GACHA_ITEMS.find((i) => i.type === "companion");
+  assert.equal(game.itemArt(cmp), cmp.icon, "companion art is emoji");
+  // 全アバターのartがAVATARSに存在する
+  for (const a of game.GACHA_ITEMS.filter((i) => i.type === "avatar")) {
+    assert.ok(game.itemArt(a).startsWith("<svg"), `art present for ${a.id}`);
+  }
+
+  // 80連天井
+  game.awardPoints(6000);
+  store.update("gacha", (g) => ({ ...g, pity: 79 }));
+  const p1 = game.pullGacha(1);
+  assert.equal(p1.results[0].rarity, 5, "pity 80th pull is ★5");
+  assert.equal(store.get("gacha").pity, 0, "pity resets on ★5");
+  store.update("gacha", (g) => ({ ...g, pity: 79 }));
+  const p2 = game.pullGacha(10);
+  assert.equal(p2.results[0].rarity, 5, "10連 starts with ★5 at pity");
+  assert.equal(p2.results.length, 10);
+  const pity = game.pityState();
+  assert.ok(pity.remaining <= game.GACHA_PITY && pity.remaining > 0, "pityState remaining");
+
+  // 装備: 単一はトグル、装飾は複数可
+  game.equipItem("ava-shadow", "avatar");
+  assert.equal(store.get("settings").avatar, "ava-shadow");
+  game.equipItem("ava-shadow", "avatar");
+  assert.equal(store.get("settings").avatar, "", "avatar toggles off");
+  game.equipItem("bg-starry", "background");
+  assert.equal(store.get("settings").background, "bg-starry");
+  game.equipItem("dec-candle", "decoration");
+  game.equipItem("dec-plant", "decoration");
+  assert.equal(store.get("settings").decorations.length, 2, "decorations stack");
+  game.equipItem("dec-candle", "decoration");
+  assert.deepEqual(store.get("settings").decorations, ["dec-plant"], "decoration toggles individually");
+  assert.ok(game.isEquipped("dec-plant", "decoration"));
+  assert.ok(!game.isEquipped("dec-candle", "decoration"));
+  game.equipItem("no-such-id", "avatar");
+  assert.equal(store.get("settings").avatar, "", "unknown id ignored");
+}
+
 console.log("ALL TESTS PASSED");

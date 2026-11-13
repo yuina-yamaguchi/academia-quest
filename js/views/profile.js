@@ -14,8 +14,19 @@ export function render(root) {
 
   const companion = game.GACHA_ITEMS.find((i) => i.id === settings.companion && i.type === "companion");
   const titleItem = game.GACHA_ITEMS.find((i) => i.id === settings.title && i.type === "title");
-  const frameClass =
-    settings.frame === "frm-gold" ? "frame-gold" : settings.frame === "frm-silver" ? "frame-silver" : settings.frame === "frm-bronze" ? "frame-bronze" : "";
+  const avatarItem = game.GACHA_ITEMS.find((i) => i.id === settings.avatar && i.type === "avatar");
+  const bgItem = game.GACHA_ITEMS.find((i) => i.id === settings.background && i.type === "background");
+  const frameItem = game.GACHA_ITEMS.find((i) => i.id === settings.frame && i.type === "frame");
+
+  const frameStyle = frameItem
+    ? `border-width:3px;border-color:var(--r${frameItem.rarity});box-shadow:0 0 14px ${
+        frameItem.rarity === 5 ? "rgba(232,184,75,0.45)" : frameItem.rarity === 4 ? "rgba(169,123,224,0.45)" : "rgba(90,155,232,0.4)"
+      };`
+    : "";
+  // 背景: 可読性のため暗いスクリムを重ねる
+  const bgStyle = bgItem ? `background:linear-gradient(rgba(18,22,42,0.5),rgba(18,22,42,0.62)),${bgItem.bg};` : "";
+
+  const avatarHtml = avatarItem ? game.itemArt(avatarItem) : companion ? companion.icon : "⚜️";
 
   const ownedTitles = game.GACHA_ITEMS.filter((i) => i.type === "title" && gacha.owned[i.id]);
   const ownedCompanions = game.GACHA_ITEMS.filter((i) => i.type === "companion" && gacha.owned[i.id]);
@@ -25,9 +36,9 @@ export function render(root) {
   root.innerHTML = `
     <div class="section-head"><h2>プロフィール</h2><span class="hint">ギルドカード</span></div>
 
-    <section class="panel guild-card ${frameClass}">
+    <section class="panel guild-card" style="${frameStyle}${bgStyle}">
       <div class="gc-top">
-        <div class="gc-avatar">${companion ? companion.icon : "⚜️"}</div>
+        <div class="gc-avatar ${avatarItem ? "has-art" : ""}">${avatarHtml}</div>
         <div>
           <div class="gc-name">${escapeHtml(settings.playerName || "挑戦者")}</div>
           <div class="gc-title">${titleItem ? `${titleItem.icon} ${titleItem.name}` : "（称号未装備）"}</div>

@@ -79,6 +79,9 @@ export function render(root) {
   const companion = companionId
     ? game.GACHA_ITEMS.find((i) => i.id === companionId)
     : null;
+  const decorations = (settings.decorations || [])
+    .map((id) => game.GACHA_ITEMS.find((i) => i.id === id))
+    .filter(Boolean);
 
   // 今日最も進んでいる科目のゲージを1つ表示用に取得
   const subjectCards = curriculum
@@ -153,8 +156,12 @@ export function render(root) {
       <section class="panel">
         <div class="panel-title">🏰 進捗の街区</div>
         ${
-          companion
-            ? `<div class="companion-row"><span class="companion-face">${companion.icon}</span><span class="hint">${companion.name}が見守っています</span></div>`
+          companion || decorations.length
+            ? `<div class="companion-row">
+                ${decorations.map((d) => `<span class="companion-face deco" title="${d.name}">${d.icon}</span>`).join("")}
+                ${companion ? `<span class="companion-face" title="${companion.name}">${companion.icon}</span>` : ""}
+               </div>
+               <div class="hint" style="text-align:center">${[decorations.map((d) => d.name), companion?.name].filter(Boolean).join(" ・ ")}</div>`
             : `<div class="hint" style="text-align:center">お宝ガチャで仲間を手に入れよう</div>`
         }
         <div style="display:grid;gap:10px;margin-top:8px">
