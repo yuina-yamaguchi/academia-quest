@@ -42,6 +42,33 @@ export function ensureCurriculum() {
   return curriculum;
 }
 
+/* ---------- 端末ID・同期補助 ---------- */
+
+export function deviceId() {
+  const meta = store.get("meta");
+  if (!meta.deviceId) {
+    meta.deviceId = `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    store.set("meta", meta);
+  }
+  return meta.deviceId;
+}
+
+// カリキュラムの追加・改名・復元時に呼ぶ（削除墓標より新しいと判定される）
+export function bumpCurriculumIds(ids) {
+  const at = store.get("curriculumAt");
+  const now = new Date().toISOString();
+  for (const id of ids) if (id) at[id] = now;
+  store.set("curriculumAt", at);
+}
+
+// 科目・単元の削除墓標
+export function tombstoneCurriculum(ids) {
+  const del = store.get("deletedCurriculum");
+  const now = new Date().toISOString();
+  for (const id of ids) if (id) del[id] = now;
+  store.set("deletedCurriculum", del);
+}
+
 export function allUnits(curriculum = ensureCurriculum()) {
   const list = [];
   for (const s of curriculum) for (const u of s.units) list.push({ subject: s, unit: u });
@@ -104,7 +131,8 @@ export function addSession({ minutes, unitId = null, subjectId = null, manual = 
   sessions.push(session);
   store.set("sessions", sessions);
 
-  store.update("xp", (x) => x + m);
+  // XPは学習記録の合計から導出（同期時の二重加算・欠落を防ぐ）
+  store.set("xp", Math.max(store.get("xp"), totalMinutes()));
   awardPoints(m, { silent: true });
 
   // デイリー進捗
@@ -130,6 +158,9 @@ export function setUnitStatus(unitId, status) {
   if (status) progress[unitId] = status;
   else delete progress[unitId];
   store.set("progress", progress);
+  const progressAt = store.get("progressAt");
+  progressAt[unitId] = new Date().toISOString();
+  store.set("progressAt", progressAt);
 
   ensureDaily();
   const daily = store.get("daily");
@@ -242,15 +273,31 @@ export function claimBonus() {
 
 /* ---------- ポイント ---------- */
 
+// 残高 = 共通ベース + 端末ごとの獲得合計 - 端末ごとの消費合計
+// 端末の獲得/消費は各端末のキーで加算するため、同期マージでも欠落・二重加算しない
+export function pointsBalance() {
+  const base = store.get("points") || 0;
+  const earned = Object.values(store.get("pointsEarned")).reduce((s, n) => s + (Number(n) || 0), 0);
+  const spent = Object.values(store.get("pointsSpent")).reduce((s, n) => s + (Number(n) || 0), 0);
+  return Math.max(0, base + earned - spent);
+}
+
 export function awardPoints(amount, { silent = false } = {}) {
-  store.update("points", (p) => p + amount);
+  const me = deviceId();
+  store.update("pointsEarned", (m) => {
+    m[me] = (Number(m[me]) || 0) + amount;
+    return m;
+  });
   return { amount, silent };
 }
 
 export function spendPoints(amount) {
-  const p = store.get("points");
-  if (p < amount) return false;
-  store.set("points", p - amount);
+  if (pointsBalance() < amount) return false;
+  const me = deviceId();
+  store.update("pointsSpent", (m) => {
+    m[me] = (Number(m[me]) || 0) + amount;
+    return m;
+  });
   return true;
 }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "academia-quest-v3";
+const CACHE_NAME = "academia-quest-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const APP_SHELL = [
   "./js/game.js",
   "./js/seed.js",
   "./js/avatars.js",
+  "./js/sync.js",
   "./js/views/home.js",
   "./js/views/quests.js",
   "./js/views/record.js",
@@ -38,6 +39,8 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  // 同期API（GitHub）はSWキャッシュの対象外
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((cached) => {
       const fetched = fetch(event.request)

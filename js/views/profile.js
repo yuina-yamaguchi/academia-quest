@@ -1,6 +1,7 @@
 import { store } from "../store.js";
 import * as game from "../game.js";
 import { SEED_SUBJECTS } from "../seed.js";
+import { loadSync, saveSync, disconnectSync, connectSync, syncNow, wipeRemote } from "../sync.js";
 
 export function render(root) {
   const settings = store.get("settings");
@@ -32,6 +33,7 @@ export function render(root) {
   const ownedCompanions = game.GACHA_ITEMS.filter((i) => i.type === "companion" && gacha.owned[i.id]);
 
   const achCount = Object.keys(unlocked).length;
+  const sync = loadSync();
 
   root.innerHTML = `
     <div class="section-head"><h2>プロフィール</h2><span class="hint">ギルドカード</span></div>
@@ -48,7 +50,7 @@ export function render(root) {
       <div class="gc-stats">
         <div><div class="s-num">${Math.round(totalMin / 60)}</div><div class="s-cap">累計時間</div></div>
         <div><div class="s-num">${store.get("xp").toLocaleString()}</div><div class="s-cap">XP</div></div>
-        <div><div class="s-num">${store.get("points").toLocaleString()}</div><div class="s-cap">ポイント</div></div>
+        <div><div class="s-num">${game.pointsBalance().toLocaleString()}</div><div class="s-cap">ポイント</div></div>
         <div><div class="s-num">${achCount}/${game.ACHIEVEMENTS.length}</div><div class="s-cap">実績</div></div>
       </div>
     </section>
@@ -142,6 +144,50 @@ export function render(root) {
     </section>
 
     <section class="panel">
+      <div class="panel-title">☁️ データ同期（GitHub Gist）</div>
+      <p class="hint" style="margin-top:0">
+        GitHubの非公開Gistにデータを自動保存し、複数の端末とマージで同期します。
+        記録は和集合、進捗・設定は更新が新しい方が採用、削除も同期されます。
+      </p>
+      ${
+        sync.enabled
+          ? `<div class="form-grid">
+        <div class="field">
+          <label>保管庫ID</label>
+          <input id="sync-gist" value="${escapeAttr(sync.gistId || "")}" placeholder="（接続時に自動設定）" />
+          <span class="hint">2台目はトークンと一緒にこのIDを入力してください</span>
+        </div>
+        <div class="field">
+          <label>最終同期</label>
+          <input readonly value="${sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString("ja-JP") : "まだありません"}" />
+        </div>
+        <div class="field">
+          <label>トークンの差し替え（任意）</label>
+          <input id="sync-token" type="password" placeholder="新しいトークンを入力" autocomplete="off" />
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" data-action="sync-now">今すぐ同期</button>
+          <button class="btn" data-action="sync-save">接続情報を保存</button>
+          <button class="btn btn-ghost" data-action="sync-disconnect" style="color:var(--danger)">同期を解除</button>
+        </div>
+      </div>`
+          : `<div class="form-grid">
+        <div class="field">
+          <label>GitHubトークン</label>
+          <input id="sync-token" type="password" placeholder="ghp_… または github_pat_…" autocomplete="off" />
+          <span class="hint">classic: <code>gist</code> スコープ / fine-grained: Gists = Read and write</span>
+        </div>
+        <div class="field">
+          <label>保管庫ID（任意）</label>
+          <input id="sync-gist" placeholder="空欄なら自動検出、無ければ新規作成" />
+          <span class="hint">初回は空欄のままでOK。2台目は1台目で表示されたIDを貼り付け</span>
+        </div>
+        <button class="btn btn-primary" data-action="sync-connect">接続して同期を開始</button>
+      </div>`
+      }
+    </section>
+
+    <section class="panel">
       <div class="panel-title">💾 データのバックアップ</div>
       <p class="hint" style="margin-top:0">
         データはこのブラウザに保存されています。別の端末へ移す、または消去に備えてJSONで書き出してください。
@@ -189,14 +235,16 @@ export function onAction(action, app, dataset) {
     const name = input.value.trim();
     if (!name) return;
     const curriculum = game.ensureCurriculum();
+    const id = `subj-${Date.now()}`;
     curriculum.push({
-      id: `subj-${Date.now()}`,
+      id,
       name,
       icon: "📘",
       color: ["#4A90D9", "#5BC98C", "#9B7ED8", "#E8A13C", "#E05C5C"][curriculum.length % 5],
       units: [],
     });
     store.set("curriculum", curriculum);
+    game.bumpCurriculumIds([id]);
     app.toast("科目を追加しました");
     app.refresh();
     return;
@@ -209,8 +257,10 @@ export function onAction(action, app, dataset) {
     const curriculum = game.ensureCurriculum();
     const subject = curriculum.find((s) => s.id === dataset.addUnit);
     if (!subject) return;
-    subject.units.push({ id: `u-${Date.now()}`, name });
+    const id = `u-${Date.now()}`;
+    subject.units.push({ id, name });
     store.set("curriculum", curriculum);
+    game.bumpCurriculumIds([id]);
     app.toast("単元を追加しました");
     app.refresh();
     return;
@@ -222,6 +272,7 @@ export function onAction(action, app, dataset) {
     if (!subject) return;
     subject.units = subject.units.filter((u) => u.id !== dataset.delUnit);
     store.set("curriculum", curriculum);
+    game.tombstoneCurriculum([dataset.delUnit]);
     const progress = store.get("progress");
     delete progress[dataset.delUnit];
     store.set("progress", progress);
@@ -233,13 +284,16 @@ export function onAction(action, app, dataset) {
     if (!confirm("この科目とその単元を削除します。よろしいですか？")) return;
     let curriculum = game.ensureCurriculum();
     const subject = curriculum.find((s) => s.id === dataset.delSubject);
+    const tombstones = [dataset.delSubject];
     if (subject) {
+      subject.units.forEach((u) => tombstones.push(u.id));
       const progress = store.get("progress");
       subject.units.forEach((u) => delete progress[u.id]);
       store.set("progress", progress);
     }
     curriculum = curriculum.filter((s) => s.id !== dataset.delSubject);
     store.set("curriculum", curriculum);
+    game.tombstoneCurriculum(tombstones);
     app.toast("科目を削除しました");
     app.refresh();
     return;
@@ -248,7 +302,55 @@ export function onAction(action, app, dataset) {
   if (action === "restore-seed") {
     if (!confirm("標準カリキュラムに戻します。進捗は保持されます。よろしいですか？")) return;
     store.set("curriculum", structuredClone(SEED_SUBJECTS));
+    const ids = [];
+    for (const s of SEED_SUBJECTS) {
+      ids.push(s.id);
+      for (const u of s.units) ids.push(u.id);
+    }
+    game.bumpCurriculumIds(ids); // 復元＝後から追加された側として墓標より新しい判定にする
     app.toast("標準カリキュラムに戻しました");
+    app.refresh();
+    return;
+  }
+
+  if (action === "sync-connect") {
+    const token = document.getElementById("sync-token")?.value || "";
+    const gistId = document.getElementById("sync-gist")?.value || "";
+    connectSync(token, gistId).then((r) => {
+      if (r.ok) app.toast("☁️ 同期を開始しました");
+      else app.toast(r.error || "接続に失敗しました", false, 5000);
+      app.refresh();
+    });
+    return;
+  }
+
+  if (action === "sync-now") {
+    const gistInput = document.getElementById("sync-gist")?.value?.trim();
+    const cfg = loadSync();
+    if (gistInput && gistInput !== cfg.gistId) saveSync({ ...cfg, gistId: gistInput });
+    syncNow().then((r) => {
+      if (r.skip) app.toast("同期は未接続です");
+      else if (r.ok) app.toast(r.pushed ? "☁️ 同期しました（送信）" : "☁️ 同期しました");
+      else app.toast(`同期失敗: ${r.error || "不明なエラー"}`, false, 5000);
+      app.refresh();
+    });
+    return;
+  }
+
+  if (action === "sync-save") {
+    const token = document.getElementById("sync-token")?.value?.trim();
+    const gistId = document.getElementById("sync-gist")?.value?.trim() || "";
+    const cfg = loadSync();
+    saveSync({ ...cfg, token: token || cfg.token, gistId });
+    app.toast("接続情報を保存しました");
+    app.refresh();
+    return;
+  }
+
+  if (action === "sync-disconnect") {
+    if (!confirm("同期を解除しますか？トークンはこの端末から削除されます（Gist自体は残ります）。")) return;
+    disconnectSync();
+    app.toast("同期を解除しました");
     app.refresh();
     return;
   }
@@ -274,7 +376,8 @@ export function onAction(action, app, dataset) {
     if (!confirm("本当に全データを消去しますか？元に戻せません。")) return;
     if (!confirm("最終確認: すべての進捗・記録・実績が消えます。")) return;
     store.resetAll();
-    location.reload();
+    // 同期中はリモートの保管庫も削除（消去したデータが同期で蘇るのを防ぐ）
+    wipeRemote().finally(() => location.reload());
   }
 }
 
@@ -301,5 +404,6 @@ export function onInput(e, app, dataset) {
   if (unit) {
     unit.name = e.target.value;
     store.set("curriculum", curriculum);
+    game.bumpCurriculumIds([unit.id]);
   }
 }

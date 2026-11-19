@@ -181,16 +181,25 @@ export function render(root) {
   `;
 }
 
+// 同期マージで削除が復活しないようにIDを墓標に残す
+function bury(id) {
+  const deleted = store.get("deleted");
+  deleted.push(id);
+  store.set("deleted", deleted.slice(-500));
+}
+
 export function onAction(action, app, dataset) {
   if (action === "del-session") {
     const sessions = store.get("sessions").filter((s) => s.id !== dataset.delSession);
     store.set("sessions", sessions);
+    bury(dataset.delSession);
     app.toast("記録を削除しました");
     app.refresh();
   }
   if (action === "del-exam") {
     const exams = store.get("exams").filter((e) => e.id !== dataset.delExam);
     store.set("exams", exams);
+    bury(dataset.delExam);
     app.toast("模試を削除しました");
     app.refresh();
   }

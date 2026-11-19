@@ -22,7 +22,7 @@ assert.equal(v.bonusAvailable, false, "同日2回目はボーナスなし");
 const b = game.claimBonus();
 assert.equal(b.claimed, true);
 assert.equal(b.amount, 100);
-assert.equal(store.get("points"), 100);
+assert.equal(game.pointsBalance(), 100, "残高にボーナス加算");
 
 // 学習記録 → XP/ポイント/デイリー進捗
 game.startTimer(null);
@@ -45,13 +45,14 @@ game.addSession({ minutes: 200, manual: true });
 const d2 = store.get("daily");
 const qMin = d2.quests.find((q) => q.id === "q_min");
 assert.equal(qMin.done, true, "目標時間クエスト達成");
+assert.equal(store.get("xp"), game.totalMinutes(), "XPは学習記録の合計から導出");
 
 // ランク
 const rank = game.rankInfo(store.get("xp"));
 assert.ok(rank.rank >= 1 && rank.need > 0);
 
 // ガチャ: ポイントが十分なら10連
-const pts = store.get("points");
+const pts = game.pointsBalance();
 console.log("points after:", pts);
 if (pts >= 1000) {
   const pull = game.pullGacha(10);
@@ -147,6 +148,248 @@ assert.ok(store.get("sessions").length > 0);
   assert.ok(!game.isEquipped("dec-candle", "decoration"));
   game.equipItem("no-such-id", "avatar");
   assert.equal(store.get("settings").avatar, "", "unknown id ignored");
+}
+
+// ---------- 同期（Gistマージ・トークン・墓標） ----------
+{
+  const sync = await import("../js/sync.js");
+  const now = new Date().toISOString();
+  const earlier = new Date(Date.now() - 600000).toISOString();
+  const later = new Date(Date.now() + 600000).toISOString();
+
+  const mkData = (over = {}) => ({
+    settings: {
+      playerName: "P", examDate: null, examLabel: "", dailyGoalMin: 120,
+      title: "", companion: "", frame: "", avatar: "", background: "", decorations: [], createdAt: null,
+    },
+    curriculum: [{ id: "s1", name: "科目", icon: "📘", color: "#4A90D9", units: [{ id: "u1", name: "単元1" }, { id: "u2", name: "単元2" }] }],
+    curriculumAt: {},
+    deletedCurriculum: {},
+    progress: {},
+    progressAt: {},
+    sessions: [],
+    deleted: [],
+    daily: null,
+    streak: { current: 0, best: 0, lastVisit: null },
+    xp: 0,
+    points: 0,
+    pointsEarned: {},
+    pointsSpent: {},
+    gacha: { owned: {}, history: [], pity: 0 },
+    exams: [],
+    achievements: {},
+    timer: { startedAt: null, unitId: null },
+    ui: { heatDays: 180 },
+    meta: { deviceId: "dev-x", updatedAt: now, at: {} },
+    ...over,
+  });
+  const mkPayload = (data) => ({ version: 2, updatedAt: now, data });
+  const balanceOf = (d) =>
+    (d.points || 0) +
+    Object.values(d.pointsEarned || {}).reduce((s, n) => s + n, 0) -
+    Object.values(d.pointsSpent || {}).reduce((s, n) => s + n, 0);
+
+  // ポイント台帳: 端末ごとの獲得は合算、ベースは最大、消費も端末ごと
+  {
+    const remote = mkData({ points: 50, pointsEarned: { "dev-b": 70 }, pointsSpent: { "dev-b": 10 } });
+    const local = mkData({ deviceId: "dev-a", pointsEarned: { "dev-a": 100 } });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.equal(m.points, 50, "ベースは大きい方");
+    assert.equal(balanceOf(m), 210, "50 + 100 + 70 - 10（両端末の獲得が消えない）");
+    // 再マージしても増えない（二重加算しない）
+    const m2 = sync.mergeData(mkPayload(m), mkPayload(m)).data;
+    assert.equal(balanceOf(m2), 210, "再同期でも二重加算しない");
+  }
+
+  // 学習記録: 和集合 + 削除墓標
+  {
+    const s1 = { id: "s1", start: earlier, end: earlier, minutes: 30 };
+    const s2 = { id: "s2", start: now, end: now, minutes: 20 };
+    const s3 = { id: "s3", start: later, end: later, minutes: 10 };
+    const remote = mkData({ sessions: [s1, s2] });
+    const local = mkData({ sessions: [s3], deleted: ["s1"] });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    const ids = m.sessions.map((x) => x.id);
+    assert.deepEqual(ids, ["s2", "s3"], "墓標のs1は復活せず、他は和集合・start順");
+    assert.equal(m.xp, 30, "XPは削除後の合計と大きい方");
+  }
+
+  // 進捗: 更新時刻が新しい方、片側のみはそのまま
+  {
+    const remote = mkData({ progress: { u1: "active" }, progressAt: { u1: later } });
+    const local = mkData({ progress: { u1: "done", u2: "done" }, progressAt: { u1: earlier, u2: earlier } });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.equal(m.progress.u1, "active", "時刻が新しいremoteが勝つ");
+    assert.equal(m.progress.u2, "done", "片側にしかない進捗は維持");
+    // 旧データ（時刻なし）同士は段階優先
+    const r2 = mkData({ progress: { u1: "active" } });
+    const l2 = mkData({ progress: { u1: "done" } });
+    const m2 = sync.mergeData(mkPayload(r2), mkPayload(l2)).data;
+    assert.equal(m2.progress.u1, "done", "時刻なしは制覇>攻略中>未着手");
+  }
+
+  // 科目・単元の削除同期（墓標）と復元（後勝ち）
+  {
+    const remote = mkData({
+      curriculum: [{ id: "s1", name: "科目", icon: "📘", color: "#4A90D9", units: [{ id: "u2", name: "単元2" }] }],
+      deletedCurriculum: { u1: now },
+    });
+    const local = mkData({}); // u1 がまだ残っている側
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.deepEqual(m.curriculum[0].units.map((u) => u.id), ["u2"], "削除単元は同期される");
+
+    // 後から復元（curriculumAt が墓標より新しい）→生き残る
+    const restored = mkData({ curriculumAt: { u1: later } });
+    const m2 = sync.mergeData(mkPayload(remote), mkPayload(restored)).data;
+    assert.deepEqual(m2.curriculum[0].units.map((u) => u.id).sort(), ["u1", "u2"], "復元は削除に勝つ");
+
+    // 科目ごと削除
+    const noSubject = mkData({ curriculum: [], deletedCurriculum: { s1: now, u1: now, u2: now } });
+    const m3 = sync.mergeData(mkPayload(noSubject), mkPayload(local)).data;
+    assert.equal(m3.curriculum.length, 0, "科目削除は同期される");
+  }
+
+  // デイリー: 同日は進捗マックス・達成OR
+  {
+    const today = game.todayKey();
+    const quest = (over) => ({
+      id: "q_min", label: "今日の目標時間まで学ぶ", target: 120, reward: 60, icon: "📖",
+      progress: 0, done: false, claimed: false, ...over,
+    });
+    const remote = mkData({ daily: { date: today, quests: [quest({ progress: 50 })], allDone: false, bonusClaimed: false } });
+    const local = mkData({ daily: { date: today, quests: [quest({ progress: 80, done: true })], allDone: false, bonusClaimed: true } });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.equal(m.daily.quests[0].progress, 80, "進捗は大きい方");
+    assert.equal(m.daily.quests[0].done, true, "達成はOR");
+    assert.equal(m.daily.bonusClaimed, true, "ボーナス受取はOR");
+    // 日付が新しい方が勝つ
+    const older = mkData({ daily: { date: "2020-01-01", quests: [], allDone: false, bonusClaimed: false } });
+    const m2 = sync.mergeData(mkPayload(older), mkPayload(local)).data;
+    assert.equal(m2.daily.date, today, "日付が新しい方を採用");
+  }
+
+  // 連続ログイン: 最終訪問が新しい方
+  {
+    const remote = mkData({ streak: { current: 5, best: 5, lastVisit: "2026-11-19" } });
+    const local = mkData({ streak: { current: 3, best: 9, lastVisit: "2026-11-10" } });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.equal(m.streak.lastVisit, "2026-11-19", "新しい最終訪問");
+    assert.equal(m.streak.current, 5);
+    assert.equal(m.streak.best, 9, "最高記録は維持");
+  }
+
+  // 設定: キーごとの更新時刻でLWW
+  {
+    const remote = mkData({
+      settings: { ...mkData().settings, playerName: "B" },
+      meta: { deviceId: "dev-b", updatedAt: now, at: { settings: later } },
+    });
+    const local = mkData({
+      settings: { ...mkData().settings, playerName: "A" },
+      meta: { deviceId: "dev-a", updatedAt: now, at: { settings: earlier } },
+    });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.equal(m.settings.playerName, "B", "更新が新しい設定が勝つ");
+    assert.equal(m.meta.deviceId, "dev-a", "deviceIdはローカルを維持");
+  }
+
+  // トークンはエクスポート・リセットに含まれない
+  {
+    sync.saveSync({ enabled: true, token: "SECRET_TOKEN_XYZ", gistId: "g1", lastSyncedAt: null });
+    const exp = store.exportJSON();
+    assert.ok(!exp.includes("SECRET_TOKEN_XYZ"), "エクスポートにトークンなし");
+    assert.ok(localStorage.getItem("aq.sync").includes("SECRET_TOKEN_XYZ"), "端末には保存される");
+    assert.equal(sync.loadSync().token, "SECRET_TOKEN_XYZ");
+    sync.disconnectSync();
+    assert.equal(sync.loadSync().enabled, false, "解除で無効化");
+  }
+
+  // fetchモックで Gist 同期フロー（作成→プッシュ→再同期）
+  {
+    let gistContent = null;
+    let patchCount = 0;
+    const FILE = "academia-quest-data.json";
+    globalThis.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      const ok = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => JSON.stringify(data) });
+      if (opts.method === "POST" && u.endsWith("/gists")) {
+        gistContent = JSON.parse(opts.body).files[FILE].content;
+        return ok({ id: "g-test" });
+      }
+      if (opts.method === "PATCH") {
+        patchCount++;
+        gistContent = JSON.parse(opts.body).files[FILE].content;
+        return ok({});
+      }
+      if (u.includes("/gists?")) return ok([]); // 自動検出: なし
+      if (u.includes("/gists/g-test")) return ok({ files: { [FILE]: { content: gistContent } } });
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    sync.saveSync({ enabled: true, token: "tok", gistId: "", lastSyncedAt: null });
+    const r1 = await sync.syncNow();
+    assert.equal(r1.ok, true, "初回同期OK");
+    assert.equal(r1.created, true, "保管庫を作成");
+    assert.equal(sync.loadSync().gistId, "g-test", "gistIdを保存");
+    assert.equal(patchCount, 0);
+
+    // 端末側の変更をプッシュ
+    game.setUnitStatus("u-sync-test", "done");
+    const r2 = await sync.syncNow();
+    assert.equal(r2.ok, true);
+    assert.equal(patchCount, 1, "変更があればプッシュ");
+    const pushed = JSON.parse(gistContent).data;
+    assert.equal(pushed.progress["u-sync-test"], "done", "進捗が送信される");
+
+    // 変更なしならプッシュしない
+    const r3 = await sync.syncNow();
+    assert.equal(r3.ok, true);
+    assert.equal(patchCount, 1, "無変更では再送しない");
+
+    // 相手端末のデータを取得→マージされる
+    const remotePayload = JSON.parse(gistContent);
+    remotePayload.data.sessions.push({ id: "s-remote", start: now, end: now, minutes: 42 });
+    remotePayload.data.pointsEarned["dev-remote"] = 33;
+    // 実運用ではリモートのXPも整合している（手作りデータも整合させる）
+    remotePayload.data.xp = Math.max(
+      remotePayload.data.xp,
+      remotePayload.data.sessions.reduce((s, x) => s + (x.minutes || 0), 0)
+    );
+    gistContent = JSON.stringify(remotePayload);
+    const r4 = await sync.syncNow();
+    assert.equal(r4.ok, true);
+    assert.ok(store.get("sessions").some((s) => s.id === "s-remote"), "リモートの記録を取り込む");
+    assert.equal(store.get("pointsEarned")["dev-remote"], 33, "リモートのポイント台帳を取り込む");
+    assert.equal(patchCount, 1, "マージ結果がリモートと同じなら送らない");
+
+    // 無効トークン
+    globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => "" });
+    sync.saveSync({ ...sync.loadSync(), token: "bad" });
+    const r5 = await sync.syncNow();
+    assert.equal(r5.ok, false);
+    assert.equal(r5.status, 401, "401を伝える");
+
+    sync.disconnectSync();
+    delete globalThis.fetch;
+  }
+
+  // 全データ消去: リモート保管庫の削除 + 同期解除（消去済みデータが蘇らない）
+  {
+    let deleted = false;
+    globalThis.fetch = async (url, opts = {}) => {
+      if (opts.method === "DELETE" && String(url).includes("/gists/")) {
+        deleted = true;
+        return { ok: true, status: 204, json: async () => null, text: async () => "" };
+      }
+      return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+    };
+    sync.saveSync({ enabled: true, token: "tok", gistId: "g1", lastSyncedAt: null });
+    await sync.wipeRemote();
+    assert.ok(deleted, "保管庫を削除する");
+    assert.equal(sync.loadSync().enabled, false, "同期解除");
+    assert.equal(sync.loadSync().token, "", "トークン削除");
+    delete globalThis.fetch;
+  }
 }
 
 console.log("ALL TESTS PASSED");

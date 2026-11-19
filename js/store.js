@@ -17,17 +17,36 @@ const DEFAULTS = {
   },
   curriculum: null, // seed から初回生成
   progress: {}, // unitId -> "todo" | "active" | "done"
+  progressAt: {}, // unitId -> ISO（進捗の更新時刻・同期マージ用）
   sessions: [], // {id,start,end,minutes,unitId,subjectId,manual}
+  deleted: [], // 削除したセッション/模試のID（同期マージ用の墓標）
   daily: null, // {date, quests:[], bonusClaimed}
   streak: { current: 0, best: 0, lastVisit: null },
-  xp: 0,
-  points: 0,
+  xp: 0, // 学習記録の合計分から導出（同期時は再計算）
+  points: 0, // 共通ベース残高（両端末の最大値でマージ）
+  pointsEarned: {}, // deviceId -> 獲得累計（端末ごとに合算）
+  pointsSpent: {}, // deviceId -> 消費累計（端末ごとに合算）
   gacha: { owned: {}, history: [], pity: 0 },
   exams: [],
   achievements: {}, // code -> unlockedAt(ISO)
   timer: { startedAt: null, unitId: null },
   ui: { heatDays: 180 },
+  curriculumAt: {}, // subjectId/unitId -> ISO（追加・改名の時刻）
+  deletedCurriculum: {}, // subjectId/unitId -> ISO（削除の墓標）
+  meta: { deviceId: "", updatedAt: null, at: {} }, // at: キー別更新時刻（LWWマージ用）
 };
+
+// 書き込みフック（同期のトリガー。sync.js が設定する）
+let onChange = null;
+
+function bumpMeta(key) {
+  if (key === "meta") return;
+  const meta = store.get("meta");
+  meta.at = meta.at || {};
+  meta.at[key] = new Date().toISOString();
+  meta.updatedAt = meta.at[key];
+  localStorage.setItem(PREFIX + "meta", JSON.stringify(meta));
+}
 
 export const store = {
   get(key) {
@@ -48,6 +67,8 @@ export const store = {
 
   set(key, value) {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    bumpMeta(key);
+    if (onChange) onChange(key);
     return value;
   },
 
@@ -59,12 +80,24 @@ export const store = {
 
   remove(key) {
     localStorage.removeItem(PREFIX + key);
+    if (onChange) onChange(key);
   },
 
   all() {
     const data = {};
     for (const key of Object.keys(DEFAULTS)) data[key] = this.get(key);
     return data;
+  },
+
+  // 同期マージ結果の適用：フック・時刻更新をせず raw で書き込む
+  replace(data) {
+    for (const key of Object.keys(DEFAULTS)) {
+      if (key in data) localStorage.setItem(PREFIX + key, JSON.stringify(data[key]));
+    }
+  },
+
+  onChange(fn) {
+    onChange = fn;
   },
 
   exportJSON() {
@@ -82,5 +115,9 @@ export const store = {
 
   resetAll() {
     for (const key of Object.keys(DEFAULTS)) this.remove(key);
+  },
+
+  keys() {
+    return Object.keys(DEFAULTS);
   },
 };

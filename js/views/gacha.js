@@ -30,7 +30,7 @@ function rarityClass(r) {
 }
 
 export function render(root) {
-  const points = store.get("points");
+  const points = game.pointsBalance();
   const gacha = store.get("gacha");
   const settings = store.get("settings");
   const pulls = game.totalPulls();

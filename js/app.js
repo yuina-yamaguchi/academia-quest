@@ -1,5 +1,6 @@
 import { store } from "./store.js";
 import * as game from "./game.js";
+import { initSync, syncNow } from "./sync.js";
 import * as home from "./views/home.js";
 import * as quests from "./views/quests.js";
 import * as record from "./views/record.js";
@@ -18,13 +19,13 @@ const ORDER = ["home", "quests", "record", "gacha", "profile"];
 let current = "home";
 
 const app = {
-  toast(message, gold = false) {
+  toast(message, gold = false, ms = 3300) {
     const root = document.getElementById("toast-root");
     const el = document.createElement("div");
     el.className = `toast${gold ? " gold" : ""}`;
     el.textContent = message;
     root.appendChild(el);
-    setTimeout(() => el.remove(), 3300);
+    setTimeout(() => el.remove(), ms);
   },
 
   toastAchievement(ach) {
@@ -62,7 +63,7 @@ function renderNav() {
 function renderHeader() {
   const streak = store.get("streak");
   document.querySelector("#hdr-streak b").textContent = streak.current || 0;
-  document.querySelector("#hdr-points b").textContent = store.get("points").toLocaleString();
+  document.querySelector("#hdr-points b").textContent = game.pointsBalance().toLocaleString();
   document.querySelector("#hdr-rank b").textContent = game.rankInfo().rank;
 }
 
@@ -161,6 +162,15 @@ function boot() {
   game.checkAchievements();
   current = viewFromHash();
   app.refresh();
+
+  // 同期: 起動時にプル→マージ→プッシュ（未接続なら何もしない）
+  initSync();
+  syncNow().then((r) => {
+    if (r && r.ok && r.changed) {
+      app.toast("☁️ データを同期しました");
+      app.refresh();
+    }
+  }).catch(() => {});
 
   if (info.bonusAvailable) {
     setTimeout(() => showBonusModal(info), 350);
