@@ -105,6 +105,11 @@ export function render(root) {
       </section>
 
       <section class="panel">
+        <div class="panel-title">⏱️ 学習タイマー</div>
+        ${timerMarkup(timer)}
+      </section>
+
+      <section class="panel">
         <div class="panel-title">⚜️ 冒険ランク <span class="sub">XP ${xp.toLocaleString()}</span></div>
         <div class="rank-row">
           <div class="rank-badge">Lv.${rank.rank}</div>
@@ -119,11 +124,6 @@ export function render(root) {
           <div class="stat-card"><div class="num">${todayMin}<small>分</small></div><div class="cap">今日の学習</div></div>
           <div class="stat-card"><div class="num">${Math.round(overall.ratio * 100)}<small>%</small></div><div class="cap">全体進捗</div></div>
         </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">⏱️ 学習タイマー</div>
-        ${timerMarkup(timer)}
       </section>
 
       <section class="panel">
