@@ -42,7 +42,7 @@ python -m http.server 8000
 4. 数分後に発行されたURLへアクセス
 
 サービスワーカーのキャッシュを更新する際は `sw.js` の `CACHE_NAME` を
-`academia-quest-v3` のように変更してください。
+`academia-quest-v4` のように変更してください。
 
 ## データについて
 

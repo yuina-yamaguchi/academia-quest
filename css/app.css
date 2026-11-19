@@ -88,7 +88,7 @@ a { color: var(--navy); }
   flex: 1;
   min-width: 0;
   padding: 16px 14px calc(var(--nav-h) + 24px);
-  max-width: 960px;
+  max-width: 1140px;
   margin: 0 auto;
   outline: none;
 }
@@ -725,6 +725,7 @@ a { color: var(--navy); }
     background: linear-gradient(180deg, var(--navy-deep), var(--navy));
     border-right: 3px solid var(--gold);
     min-height: calc(100vh - 51px);
+    min-height: calc(100dvh - 51px);
   }
   .sidenav a {
     display: flex;
@@ -749,6 +750,26 @@ a { color: var(--navy); }
   .home-grid { grid-template-columns: 1fr 1fr; align-items: start; }
   .home-grid .span2 { grid-column: span 2; }
   .countdown .days { font-size: 64px; }
+}
+
+/* 横持ちタブレット: 横幅を活かして3カラム */
+@media (min-width: 1200px) {
+  .home-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* 横持ちの短い画面（スマホ横・小型タブレット横）: 縦並びの“延び”を解消 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar { padding-top: 4px; padding-bottom: 4px; }
+  .topbar .brand-icon { font-size: 17px; }
+  .view { padding-top: 10px; padding-bottom: calc(var(--nav-h) + 12px); }
+  .bottomnav a { padding-top: 4px; padding-bottom: 3px; }
+  .bottomnav a span:last-child { display: none; }
+  .bottomnav a .nav-icon { font-size: 22px; }
+  .home-grid { grid-template-columns: 1fr 1fr; }
+  .home-grid .span2 { grid-column: span 2; }
+  .countdown .days { font-size: 40px; }
+  .panel { margin-bottom: 10px; padding: 10px 14px; }
+  .timer-display { font-size: 34px; }
 }
 
 @media (max-width: 400px) {
