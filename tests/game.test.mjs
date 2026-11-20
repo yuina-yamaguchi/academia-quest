@@ -150,6 +150,65 @@ assert.ok(store.get("sessions").length > 0);
   assert.equal(store.get("settings").avatar, "", "unknown id ignored");
 }
 
+// ---------- 英単語カード ----------
+{
+  // 登録・重複拒否
+  const w1 = game.addWord("accrual", "発生主義");
+  assert.ok(w1 && w1.id, "単語を追加できる");
+  assert.equal(game.addWord("accrual", "別訳"), null, "英語の重複は追加不可");
+  const w2 = game.addWord("going concern", "継続企業");
+  assert.ok(w2);
+  assert.equal(game.addWord("  ", "意味だけ"), null, "英語が空は不可");
+
+  // デイリーに英単語クエストが入る（targetは語数に応じて最大5）
+  const d = game.ensureDaily();
+  const qw = d.quests.find((q) => q.id === "q_words");
+  assert.ok(qw, "デイリーに英単語クエストがある");
+  assert.equal(qw.target, 2, "target = min(5, 語数)");
+
+  // 復習キュー（未復習は全部期限切れ扱い）
+  const queue = game.buildWordQueue();
+  assert.equal(queue.length, 2, "全カードがキューに入る");
+
+  // 正解 → レベルアップ・期限が先・クエスト進捗
+  game.reviewWord(queue[0], true);
+  const p1 = store.get("wordProgress")[queue[0]];
+  assert.equal(p1.level, 1, "正解でレベルアップ");
+  assert.ok(Date.parse(p1.dueAt) > Date.now(), "次回復習は先の日時");
+  const d2 = game.ensureDaily();
+  assert.equal(d2.quests.find((q) => q.id === "q_words").progress, 1, "クエスト進捗+1");
+
+  // 誤答 → リセット
+  game.reviewWord(queue[1], false);
+  assert.equal(store.get("wordProgress")[queue[1]].level, 0, "誤答でレベル0");
+
+  // 削除 → 墓標・進捗も消える
+  game.deleteWord(queue[0]);
+  assert.ok(!store.get("words").some((w) => w.id === queue[0]), "一覧から消える");
+  assert.ok(store.get("deleted").includes(queue[0]), "削除墓標に残る");
+  assert.ok(!store.get("wordProgress")[queue[0]], "復習状態も消える");
+
+  // セッション時間の記録（source=words）
+  const before = store.get("sessions").length;
+  game.addSession({ minutes: 2, manual: true, source: "words" });
+  const sess = store.get("sessions").at(-1);
+  assert.equal(store.get("sessions").length, before + 1);
+  assert.equal(sess.source, "words", "単語セッションの印が付く");
+
+  // 30枚で実績「単語の達人」
+  while (store.get("words").length < 30) {
+    const n = store.get("words").length;
+    game.addWord(`word-${n}`, `単語-${n}`);
+  }
+  const newAch = game.checkAchievements();
+  assert.ok(newAch.some((a) => a.code === "words_30"), "30枚で実績解除");
+
+  // 編集
+  const someId = store.get("words")[0].id;
+  game.updateWord(someId, { ja: "編集済み" });
+  assert.equal(store.get("words")[0].ja, "編集済み", "意味を編集できる");
+}
+
 // ---------- 同期（Gistマージ・トークン・墓標） ----------
 {
   const sync = await import("../js/sync.js");
@@ -247,6 +306,28 @@ assert.ok(store.get("sessions").length > 0);
     const noSubject = mkData({ curriculum: [], deletedCurriculum: { s1: now, u1: now, u2: now } });
     const m3 = sync.mergeData(mkPayload(noSubject), mkPayload(local)).data;
     assert.equal(m3.curriculum.length, 0, "科目削除は同期される");
+  }
+
+  // 単語カード: 和集合 + 削除墓標 + 復習状態は新しい側
+  {
+    const w1 = { id: "w1", en: "accrual", ja: "発生主義", createdAt: earlier };
+    const w2 = { id: "w2", en: "goodwill", ja: "のれん", createdAt: earlier };
+    const remote = mkData({
+      words: [w1],
+      wordProgress: { w1: { level: 2, dueAt: later, correct: 2, wrong: 0, lastReviewedAt: later } },
+    });
+    const local = mkData({
+      words: [w1, w2],
+      wordProgress: { w1: { level: 1, dueAt: earlier, correct: 1, wrong: 0, lastReviewedAt: earlier } },
+      deleted: ["w2"],
+    });
+    const m = sync.mergeData(mkPayload(remote), mkPayload(local)).data;
+    assert.deepEqual(m.words.map((x) => x.id), ["w1"], "削除した単語は同期で復活しない");
+    assert.equal(m.wordProgress.w1.level, 2, "最後に復習した側の状態が勝つ");
+
+    const localNoDelete = mkData({ words: [w1, w2] });
+    const m2 = sync.mergeData(mkPayload(remote), mkPayload(localNoDelete)).data;
+    assert.deepEqual(m2.words.map((x) => x.id).sort(), ["w1", "w2"], "未削除の単語は和集合");
   }
 
   // デイリー: 同日は進捗マックス・達成OR

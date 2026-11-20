@@ -304,6 +304,32 @@ function mergeExams(r, l) {
   return [...map.values()];
 }
 
+// 単語カード: ID和集合（削除墓標を尊重）
+function mergeWords(r, l) {
+  const deleted = new Set(mergeDeleted(r, l));
+  const map = new Map();
+  for (const w of [...asArr(r.words), ...asArr(l.words)]) {
+    if (!w || !w.id || deleted.has(w.id)) continue;
+    if (!map.has(w.id)) map.set(w.id, w);
+  }
+  return [...map.values()];
+}
+
+// 復習状態: 最後に復習した側が勝つ（レベル・期限セットごと）
+function mergeWordProgress(r, l) {
+  const pr = r.wordProgress || {};
+  const pl = l.wordProgress || {};
+  const out = {};
+  for (const id of new Set([...Object.keys(pr), ...Object.keys(pl)])) {
+    const a = pr[id];
+    const b = pl[id];
+    if (!a) out[id] = structuredClone(b);
+    else if (!b) out[id] = structuredClone(a);
+    else out[id] = ts(b.lastReviewedAt) > ts(a.lastReviewedAt) ? structuredClone(b) : structuredClone(a);
+  }
+  return out;
+}
+
 export function mergeData(remotePayload, localPayload) {
   const R = payloadData(remotePayload);
   const L = payloadData(localPayload);
@@ -349,6 +375,8 @@ export function mergeData(remotePayload, localPayload) {
     ...pointsMerged,
     gacha: mergeGacha(R, L),
     exams: mergeExams(R, L),
+    words: mergeWords(R, L),
+    wordProgress: mergeWordProgress(R, L),
     achievements: mergeAchievements(R, L),
     meta,
   };

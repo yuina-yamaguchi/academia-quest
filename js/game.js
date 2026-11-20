@@ -69,6 +69,13 @@ export function tombstoneCurriculum(ids) {
   store.set("deletedCurriculum", del);
 }
 
+// セッション・模試・単語の削除墓標（同期マージで復活防止）
+export function buryId(id) {
+  const deleted = store.get("deleted");
+  deleted.push(id);
+  store.set("deleted", deleted.slice(-500));
+}
+
 export function allUnits(curriculum = ensureCurriculum()) {
   const list = [];
   for (const s of curriculum) for (const u of s.units) list.push({ subject: s, unit: u });
@@ -116,7 +123,7 @@ export function totalMinutes() {
   return store.get("sessions").reduce((sum, s) => sum + (s.minutes || 0), 0);
 }
 
-export function addSession({ minutes, unitId = null, subjectId = null, manual = false, start = null, end = null }) {
+export function addSession({ minutes, unitId = null, subjectId = null, manual = false, start = null, end = null, source = null }) {
   const m = Math.max(1, Math.round(minutes));
   const sessions = store.get("sessions");
   const session = {
@@ -127,6 +134,7 @@ export function addSession({ minutes, unitId = null, subjectId = null, manual = 
     unitId,
     subjectId,
     manual,
+    source,
   };
   sessions.push(session);
   store.set("sessions", sessions);
@@ -183,24 +191,59 @@ const DAILY_DEFS = [
 ];
 const DAILY_ALL_BONUS = 100;
 
+// 英単語クエスト（単語がある日のみ・targetは語数に応じて最大5）
+function wordsQuestDef(wordCount) {
+  const target = Math.min(5, wordCount);
+  return {
+    id: "q_words",
+    label: `英単語を${target}問復習する`,
+    target,
+    reward: 40,
+    icon: "📇",
+    progress: 0,
+    done: false,
+    claimed: false,
+  };
+}
+
 export function ensureDaily() {
   const today = todayKey();
   let daily = store.get("daily");
+  const wordCount = store.get("words").length;
   if (!daily || daily.date !== today) {
     const goal = store.get("settings").dailyGoalMin || 120;
+    const quests = DAILY_DEFS.map((d) => ({
+      ...d,
+      target: d.id === "q_min" ? goal : d.target,
+      progress: 0,
+      done: false,
+      claimed: false,
+    }));
+    if (wordCount > 0) quests.push(wordsQuestDef(wordCount));
     daily = {
       date: today,
-      quests: DAILY_DEFS.map((d) => ({
-        ...d,
-        target: d.id === "q_min" ? goal : d.target,
-        progress: 0,
-        done: false,
-        claimed: false,
-      })),
+      quests,
       allDone: false,
       bonusClaimed: false,
     };
     store.set("daily", daily);
+  } else {
+    // 単語の追加・削除に応じて当日分のクエストを作成/除去/target更新
+    const qw = daily.quests.find((q) => q.id === "q_words");
+    if (wordCount > 0 && !qw) {
+      daily.quests.push(wordsQuestDef(wordCount));
+      store.set("daily", daily);
+    } else if (wordCount === 0 && qw) {
+      daily.quests = daily.quests.filter((q) => q.id !== "q_words");
+      store.set("daily", daily);
+    } else if (qw && !qw.done) {
+      const t = Math.min(5, wordCount);
+      if (qw.target !== t) {
+        qw.target = t;
+        qw.label = `英単語を${t}問復習する`;
+        store.set("daily", daily);
+      }
+    }
   }
   return daily;
 }
@@ -545,6 +588,127 @@ export function ownedIds(type) {
     .map(([id]) => id);
 }
 
+/* ---------- 英単語カード（手入力・間隔復習） ---------- */
+
+// 復習間隔（分）: 10分 → 1日 → 3日 → 7日 → 14日 → 30日
+const WORD_INTERVALS_MIN = [10, 1440, 4320, 10080, 20160, 43200];
+const WORD_DAILY_TARGET = 5;
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+export function addWord(en, ja) {
+  const e = String(en || "").trim();
+  const j = String(ja || "").trim();
+  if (!e || !j) return null;
+  const words = store.get("words");
+  if (words.some((w) => w.en.toLowerCase() === e.toLowerCase())) return null;
+  const word = {
+    id: `w-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    en: e,
+    ja: j,
+    createdAt: new Date().toISOString(),
+  };
+  words.push(word);
+  store.set("words", words);
+  ensureDaily(); // 単語クエストの追加を反映
+  return word;
+}
+
+export function deleteWord(id) {
+  const before = store.get("words").length;
+  store.set(
+    "words",
+    store.get("words").filter((w) => w.id !== id)
+  );
+  const prog = store.get("wordProgress");
+  if (prog[id]) {
+    delete prog[id];
+    store.set("wordProgress", prog);
+  }
+  buryId(id);
+  ensureDaily(); // 単語クエストの除去を反映
+  return store.get("words").length < before;
+}
+
+export function updateWord(id, patch) {
+  const words = store.get("words");
+  const w = words.find((x) => x.id === id);
+  if (!w) return null;
+  if (patch.en !== undefined) w.en = String(patch.en);
+  if (patch.ja !== undefined) w.ja = String(patch.ja);
+  store.set("words", words);
+  return w;
+}
+
+export function wordStats() {
+  const words = store.get("words");
+  const prog = store.get("wordProgress");
+  const now = Date.now();
+  let due = 0;
+  let learned = 0;
+  for (const w of words) {
+    const p = prog[w.id];
+    if (!p) continue;
+    if (Date.parse(p.dueAt || 0) <= now) due++;
+    else learned++;
+  }
+  return { total: words.length, due, learned };
+}
+
+// 復習セッションのキュー: 期限切れ優先、足りなければ未期限から補充（最大5枚）
+export function buildWordQueue() {
+  const words = store.get("words");
+  if (!words.length) return [];
+  const prog = store.get("wordProgress");
+  const now = Date.now();
+  const due = [];
+  const later = [];
+  for (const w of words) {
+    const p = prog[w.id];
+    if (!p || Date.parse(p.dueAt || 0) <= now) due.push(w.id);
+    else later.push(w.id);
+  }
+  shuffleInPlace(due);
+  shuffleInPlace(later);
+  const target = Math.min(WORD_DAILY_TARGET, words.length);
+  const need = Math.max(0, target - due.length);
+  return due.concat(later.slice(0, need));
+}
+
+export function reviewWord(id, known) {
+  if (!store.get("words").some((w) => w.id === id)) return null;
+  const prog = store.get("wordProgress");
+  const p = prog[id] || { level: 0, correct: 0, wrong: 0 };
+  const now = Date.now();
+  if (known) {
+    p.level = Math.min((p.level || 0) + 1, WORD_INTERVALS_MIN.length - 1);
+    p.correct = (p.correct || 0) + 1;
+  } else {
+    p.level = 0;
+    p.wrong = (p.wrong || 0) + 1;
+  }
+  p.dueAt = new Date(now + WORD_INTERVALS_MIN[p.level] * 60000).toISOString();
+  p.lastReviewedAt = new Date(now).toISOString();
+  prog[id] = p;
+  store.set("wordProgress", prog);
+
+  // デイリークエスト「英単語の復習」
+  ensureDaily();
+  const daily = store.get("daily");
+  for (const q of daily.quests) {
+    if (q.id === "q_words") q.progress = Math.min(q.target, q.progress + 1);
+  }
+  finalizeQuests(daily);
+  store.set("daily", daily);
+  return p;
+}
+
 /* ---------- 実績 ---------- */
 
 export const ACHIEVEMENTS = [
@@ -561,6 +725,7 @@ export const ACHIEVEMENTS = [
   { code: "daily_all", icon: "🌟", name: "デイリー完遂", desc: "デイリークエストを全部達成する" },
   { code: "exam_pass", icon: "📝", name: "合格圏の記録", desc: "模試で70%以上を記録する" },
   { code: "gacha_10", icon: "🎰", name: "祈りの手", desc: "ガチャを10回分引く" },
+  { code: "words_30", icon: "📇", name: "単語の達人", desc: "単語カードを30枚登録する" },
 ];
 
 function achievementCondition(code) {
@@ -595,6 +760,8 @@ function achievementCondition(code) {
       return store.get("exams").some((e) => examRatio(e) >= 0.7);
     case "gacha_10":
       return totalPulls() >= 10;
+    case "words_30":
+      return store.get("words").length >= 30;
     default:
       return false;
   }

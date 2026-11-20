@@ -1,4 +1,4 @@
-const CACHE_NAME = "academia-quest-v4";
+const CACHE_NAME = "academia-quest-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const APP_SHELL = [
   "./js/sync.js",
   "./js/views/home.js",
   "./js/views/quests.js",
+  "./js/views/words.js",
   "./js/views/record.js",
   "./js/views/gacha.js",
   "./js/views/profile.js",

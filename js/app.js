@@ -3,6 +3,7 @@ import * as game from "./game.js";
 import { initSync, syncNow } from "./sync.js";
 import * as home from "./views/home.js";
 import * as quests from "./views/quests.js";
+import * as words from "./views/words.js";
 import * as record from "./views/record.js";
 import * as gacha from "./views/gacha.js";
 import * as profile from "./views/profile.js";
@@ -10,11 +11,12 @@ import * as profile from "./views/profile.js";
 const VIEWS = {
   home: { label: "ホーム", icon: "🏰", mod: home },
   quests: { label: "クエスト", icon: "📜", mod: quests },
+  words: { label: "単語", icon: "📇", mod: words },
   record: { label: "記録", icon: "📊", mod: record },
   gacha: { label: "お宝", icon: "🎰", mod: gacha },
   profile: { label: "プロフィール", icon: "⚜️", mod: profile },
 };
-const ORDER = ["home", "quests", "record", "gacha", "profile"];
+const ORDER = ["home", "quests", "words", "record", "gacha", "profile"];
 
 let current = "home";
 
@@ -124,7 +126,7 @@ document.addEventListener("click", (e) => {
   }
   const view = VIEWS[current];
 
-  const target = e.target.closest("[data-action], [data-filter], [data-cycle], [data-timer-unit], [data-toggle-subject], [data-gacha-tab], [data-equip], [data-del-session], [data-del-exam], [data-del-unit], [data-del-subject], [data-add-unit]");
+  const target = e.target.closest("[data-action], [data-filter], [data-cycle], [data-timer-unit], [data-toggle-subject], [data-gacha-tab], [data-equip], [data-del-session], [data-del-exam], [data-del-unit], [data-del-subject], [data-add-unit], [data-del-word]");
   if (!target) return;
   const d = target.dataset;
 
@@ -140,6 +142,7 @@ document.addEventListener("click", (e) => {
   else if ("delUnit" in d) view.mod.onAction?.("del-unit", app, d);
   else if ("delSubject" in d) view.mod.onAction?.("del-subject", app, d);
   else if ("addUnit" in d) view.mod.onAction?.("add-unit", app, d);
+  else if ("delWord" in d) view.mod.onAction?.("del-word", app, d);
 });
 
 document.addEventListener("submit", (e) => {

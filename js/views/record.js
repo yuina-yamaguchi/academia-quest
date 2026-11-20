@@ -169,7 +169,7 @@ export function render(root) {
                   <li class="log-item">
                     <span class="log-when">${when}</span>
                     <span class="log-min">${s.minutes}分</span>
-                    <span class="log-what">${unitName(s.unitId)}${s.manual ? "（手入力）" : ""}</span>
+                    <span class="log-what">${s.source === "words" ? "📇 単語カード" : `${unitName(s.unitId)}${s.manual ? "（手入力）" : ""}`}</span>
                     <button class="log-del" data-del-session="${s.id}" title="削除">🗑</button>
                   </li>`;
                 })
@@ -181,25 +181,18 @@ export function render(root) {
   `;
 }
 
-// 同期マージで削除が復活しないようにIDを墓標に残す
-function bury(id) {
-  const deleted = store.get("deleted");
-  deleted.push(id);
-  store.set("deleted", deleted.slice(-500));
-}
-
 export function onAction(action, app, dataset) {
   if (action === "del-session") {
     const sessions = store.get("sessions").filter((s) => s.id !== dataset.delSession);
     store.set("sessions", sessions);
-    bury(dataset.delSession);
+    game.buryId(dataset.delSession);
     app.toast("記録を削除しました");
     app.refresh();
   }
   if (action === "del-exam") {
     const exams = store.get("exams").filter((e) => e.id !== dataset.delExam);
     store.set("exams", exams);
-    bury(dataset.delExam);
+    game.buryId(dataset.delExam);
     app.toast("模試を削除しました");
     app.refresh();
   }

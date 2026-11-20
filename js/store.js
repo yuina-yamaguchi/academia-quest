@@ -28,6 +28,8 @@ const DEFAULTS = {
   pointsSpent: {}, // deviceId -> 消費累計（端末ごとに合算）
   gacha: { owned: {}, history: [], pity: 0 },
   exams: [],
+  words: [], // {id,en,ja,createdAt} 英単語カード（手入力）
+  wordProgress: {}, // wordId -> {level,dueAt,correct,wrong,lastReviewedAt} 間隔復習
   achievements: {}, // code -> unlockedAt(ISO)
   timer: { startedAt: null, unitId: null },
   ui: { heatDays: 180 },
