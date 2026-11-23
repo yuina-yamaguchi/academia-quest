@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8" /><title>probe</title></head>
+<body style="margin:0">
+<pre id="out">seeding...</pre>
+<script type="module">
+  import * as game from "../js/game.js";
+  import { store } from "../js/store.js";
+
+  const q = new URLSearchParams(location.search);
+  const w = q.get("w") || "360";
+  const stress = q.has("stress");
+  const route = location.hash || "#/quests";
+
+  try {
+    game.visit();
+    game.claimBonus();
+    const words = [
+      ["accrual", "発生主義"],
+      ["going concern", "継続企業"],
+      ["materiality", "重要性"],
+      ["goodwill", "のれん"],
+      ["footnote", "脚注・注記"],
+      ["consolidated financial statements", "連結財務諸表"],
+      ["hypercholesterolemia", "高コレステロール血症"],
+      ["counterintuitively", "直感に反して"],
+    ];
+    for (const [en, ja] of words) game.addWord(en, ja);
+    game.reviewWord(game.buildWordQueue()[0], true);
+
+    if (stress) {
+      const curriculum = JSON.parse(JSON.stringify(game.ensureCurriculum()));
+      curriculum[0].name = "AccountingStandardsComprehensiveReview";
+      curriculum[0].units[0].name = "ConsolidatedFinancialStatementPreparationAndAnalysis";
+      curriculum[0].units[1].name = "超絶長くても折り返さない単元名テストケース其の一";
+      if (curriculum[1]) curriculum[1].name = "管理会計論_extended_theory_and_practice";
+      store.set("curriculum", curriculum);
+      store.set("settings", { ...store.get("settings"), examDate: game.todayKey(new Date(Date.now() + 86400000 * 20)) });
+      for (let i = 0; i < 6; i++) {
+        game.addSession({ minutes: 25 + i * 10, manual: true, unitId: curriculum[0].units[i % curriculum[0].units.length].id });
+      }
+      store.set("exams", [
+        ...(store.get("exams") || []),
+        { id: "exam-stress-1", name: "第1回公開模試_extended_mock_exam", date: game.todayKey(), items: [{ label: curriculum[0].name, got: 42, max: 100 }] },
+      ]);
+    }
+  } catch (e) {
+    const pre = document.createElement("pre");
+    pre.id = "seed-error";
+    pre.textContent = "SEED-ERROR " + (e && e.stack ? e.stack : e);
+    document.body.appendChild(pre);
+  }
+
+  if (!document.getElementById("seed-error")) {
+    const f = document.createElement("iframe");
+    f.id = "f";
+    f.style.cssText = `width:${w}px;height:740px;border:0;display:block`;
+    f.src = "../" + route;
+    document.body.insertBefore(f, document.getElementById("out"));
+    f.addEventListener("load", () => {
+      setTimeout(() => {
+        try {
+          const d = f.contentDocument;
+          const vw = f.contentWindow.innerWidth;
+          const lines = [];
+          lines.push("URL=" + d.location.href);
+          lines.push("vw=" + vw + " docScrollW=" + d.documentElement.scrollWidth + " bodyScrollW=" + d.body.scrollWidth + " viewChildren=" + (d.getElementById("view") ? d.getElementById("view").children.length : -1));
+          const all = d.querySelectorAll("*");
+          const bad = [];
+          const internal = [];
+          const wide = [];
+          const clientW = d.documentElement.clientWidth;
+          const clipped = (el) => {
+            let p = el.parentElement;
+            while (p) {
+              const ox = d.defaultView.getComputedStyle(p).overflowX;
+              if (ox === "hidden" || ox === "auto" || ox === "scroll") return true;
+              p = p.parentElement;
+            }
+            return false;
+          };
+          for (const el of all) {
+            const r = el.getBoundingClientRect();
+            if (r.right > vw + 1 || r.width > vw + 1) {
+              if (!clipped(el)) bad.push({ el, right: Math.round(r.right), width: Math.round(r.width) });
+            } else if (r.right > clientW + 1 && !clipped(el)) {
+              wide.push({ el, right: Math.round(r.right), width: Math.round(r.width) });
+            }
+            if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
+              internal.push({ el, sw: el.scrollWidth, cw: el.clientWidth });
+            }
+          }
+          bad.sort((a, b) => b.right - a.right);
+          wide.sort((a, b) => b.right - a.right);
+          for (const b of bad.slice(0, 30)) {
+            const cls = String(b.el.className || "").slice(0, 70);
+            lines.push(`OVER right=${b.right} w=${b.width} <${b.el.tagName.toLowerCase()} class="${cls}"> "${(b.el.textContent || "").trim().slice(0, 25)}"`);
+          }
+          for (const b of wide.slice(0, 20)) {
+            const cls = String(b.el.className || "").slice(0, 70);
+            lines.push(`WIDE right=${b.right} w=${b.width} <${b.el.tagName.toLowerCase()} class="${cls}"> "${(b.el.textContent || "").trim().slice(0, 25)}"`);
+          }
+          for (const t of internal.slice(0, 20)) {
+            const cls = String(t.el.className || "").slice(0, 70);
+            lines.push(`INNER sw=${t.sw} cw=${t.cw} <${t.el.tagName.toLowerCase()} class="${cls}">`);
+          }
+          const nav = d.getElementById("bottomnav");
+          if (nav) {
+            const nr = nav.getBoundingClientRect();
+            lines.push(`bottomnav right=${Math.round(nr.right)} w=${Math.round(nr.width)} scrollW=${nav.scrollWidth} items=${nav.children.length}`);
+          }
+          document.getElementById("out").textContent = lines.join("\n");
+        } catch (e) {
+          document.getElementById("out").textContent = "ERROR " + e;
+        }
+      }, 2000);
+    });
+  }
+</script>
+</body>
+</html>

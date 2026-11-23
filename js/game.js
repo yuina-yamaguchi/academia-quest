@@ -783,15 +783,17 @@ export function checkAchievements() {
 /* ---------- 模試 ---------- */
 
 export function examRatio(exam) {
-  const got = exam.items.reduce((s, i) => s + (Number(i.got) || 0), 0);
-  const max = exam.items.reduce((s, i) => s + (Number(i.max) || 0), 0);
+  const items = Array.isArray(exam?.items) ? exam.items : [];
+  const got = items.reduce((s, i) => s + (Number(i.got) || 0), 0);
+  const max = items.reduce((s, i) => s + (Number(i.max) || 0), 0);
   return max ? got / max : 0;
 }
 
 export function examTotal(exam) {
+  const items = Array.isArray(exam?.items) ? exam.items : [];
   return {
-    got: exam.items.reduce((s, i) => s + (Number(i.got) || 0), 0),
-    max: exam.items.reduce((s, i) => s + (Number(i.max) || 0), 0),
+    got: items.reduce((s, i) => s + (Number(i.got) || 0), 0),
+    max: items.reduce((s, i) => s + (Number(i.max) || 0), 0),
   };
 }
 

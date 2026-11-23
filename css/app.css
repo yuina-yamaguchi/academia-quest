@@ -233,7 +233,7 @@ a { color: var(--navy); }
 
 /* ===== ホーム ===== */
 
-.home-grid { display: grid; gap: 14px; }
+.home-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
 
 .countdown {
   text-align: center;
@@ -339,7 +339,7 @@ a { color: var(--navy); }
   color: #fff;
 }
 .subject-head .s-main { flex: 1; min-width: 0; }
-.subject-head .s-name { font-weight: 800; color: var(--navy); }
+.subject-head .s-name { font-weight: 800; color: var(--navy); overflow-wrap: anywhere; }
 .subject-head .s-count { font-size: 12px; color: var(--muted); }
 .subject-head .s-toggle {
   border: none;
@@ -378,7 +378,7 @@ a { color: var(--navy); }
 }
 .unit-row.st-active .unit-status { border-color: var(--gold); color: var(--gold); }
 .unit-row.st-done .unit-status { border-color: var(--ok); background: var(--ok); color: #fff; }
-.unit-name { flex: 1; font-size: 14px; font-weight: 500; min-width: 0; }
+.unit-name { flex: 1; font-size: 14px; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
 .unit-row.st-done .unit-name { color: #6b7a70; }
 .unit-timer {
   border: 1px solid var(--panel-border);
@@ -452,7 +452,7 @@ a { color: var(--navy); }
 .bar-col .bar-val { font-size: 11px; color: var(--muted); font-weight: 700; }
 .bar-col .bar-day { font-size: 11px; color: var(--muted); }
 
-.log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
 .log-item {
   display: flex;
   gap: 10px;
@@ -469,9 +469,9 @@ a { color: var(--navy); }
 .log-del { border: none; background: transparent; color: var(--muted); font-size: 15px; padding: 2px 6px; border-radius: 6px; }
 .log-del:hover { color: var(--danger); background: rgba(217, 83, 79, 0.08); }
 
-.exam-item { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--panel-border); }
+.exam-item { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--panel-border); grid-template-columns: minmax(0, 1fr); }
 .exam-item:last-child { border-bottom: none; }
-.exam-head { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.exam-head { display: flex; align-items: center; gap: 8px; font-weight: 700; overflow-wrap: anywhere; }
 .exam-head .ratio { margin-left: auto; font-weight: 800; }
 .exam-head .ratio.pass { color: var(--ok); }
 .exam-head .ratio.fail { color: var(--danger); }
@@ -482,6 +482,7 @@ a { color: var(--navy); }
   border-radius: 999px;
   padding: 2px 9px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .exam-sub b { color: var(--ink); }
 
@@ -595,7 +596,12 @@ a { color: var(--navy); }
 
 /* ===== フォーム・設定 ===== */
 
-.form-grid { display: grid; gap: 10px; }
+.form-grid { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+#exam-scores { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+#exam-scores .ue-row > span { overflow-wrap: anywhere; }
+details > summary { overflow-wrap: anywhere; }
+.form-grid .field select,
+.field select { width: 100%; max-width: 100%; }
 .field { display: grid; gap: 4px; }
 .field label { font-size: 13px; font-weight: 700; color: var(--navy); }
 .field input, .field select, .field textarea {
@@ -610,7 +616,7 @@ a { color: var(--navy); }
 .field .row2 input { flex: 1; min-width: 0; }
 .hint { font-size: 12px; color: var(--muted); }
 
-.unit-editor { display: grid; gap: 6px; }
+.unit-editor { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
 .unit-editor .ue-row {
   display: flex;
   gap: 8px;
@@ -748,14 +754,14 @@ a { color: var(--navy); }
     color: var(--gold-bright);
   }
   .view { padding: 22px 26px 40px; }
-  .home-grid { grid-template-columns: 1fr 1fr; align-items: start; }
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .home-grid .span2 { grid-column: span 2; }
   .countdown .days { font-size: 64px; }
 }
 
 /* 横持ちタブレット: 横幅を活かして3カラム */
 @media (min-width: 1200px) {
-  .home-grid { grid-template-columns: repeat(3, 1fr); }
+  .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* 横持ちの短い画面（スマホ横・小型タブレット横）: 縦並びの“延び”を解消 */
@@ -766,7 +772,7 @@ a { color: var(--navy); }
   .bottomnav a { padding-top: 4px; padding-bottom: 3px; }
   .bottomnav a span:last-child { display: none; }
   .bottomnav a .nav-icon { font-size: 22px; }
-  .home-grid { grid-template-columns: 1fr 1fr; }
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-grid .span2 { grid-column: span 2; }
   .countdown .days { font-size: 40px; }
   .panel { margin-bottom: 10px; padding: 10px 14px; }
@@ -879,7 +885,7 @@ a { color: var(--navy); }
 .word-actions .btn { flex: 1; padding: 12px; font-size: 15px; }
 .btn-known { background: linear-gradient(180deg, #e9f9ef, #c9ecd4); border-color: #4caf7d; color: #1c7a41; }
 .btn-forgot { background: linear-gradient(180deg, #fdeeed, #f8d6d6); border-color: #e05c5c; color: #a03535; }
-.word-list { display: grid; gap: 6px; }
+.word-list { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
 .word-row {
   display: flex;
   gap: 8px;
