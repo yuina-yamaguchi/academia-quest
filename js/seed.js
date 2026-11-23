@@ -4,7 +4,7 @@ export const SEED_SUBJECTS = [
   {
     id: "subj-finance-theory",
     name: "財務会計論(理論)",
-    icon: "📝",
+    icon: "📘",
     color: "#4A90D9",
     units: [
       { id: "fint-01", name: "財務会計基礎概念" },
@@ -59,8 +59,8 @@ export const SEED_SUBJECTS = [
   {
     id: "subj-finance-calc",
     name: "財務会計論(計算)",
-    icon: "🧮",
-    color: "#12B8A6",
+    icon: "📘",
+    color: "#4A90D9",
     units: [
       { id: "finc-01", name: "現金預金" },
       { id: "finc-02", name: "有形固定資産" },
