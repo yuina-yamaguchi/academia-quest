@@ -35,7 +35,7 @@ assert.equal(qTimer.done, true, "タイマークエスト達成");
 
 // 単元制覇 → クエスト・実績
 const curriculum = game.ensureCurriculum();
-assert.equal(curriculum.length, 5, "科目5つ");
+assert.equal(curriculum.length, 6, "科目6つ");
 const unitId = curriculum[0].units[0].id;
 const newAch = game.setUnitStatus(unitId, "done");
 assert.ok(newAch.some((a) => a.code === "first_session") || store.get("sessions").length >= 1);
